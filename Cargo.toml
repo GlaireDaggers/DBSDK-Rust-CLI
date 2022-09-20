@@ -7,6 +7,8 @@ repository = "https://github.com/GlaireDaggers/DBSDK-Rust-CLI"
 license = "MIT"
 description = "Command-line utility to simplify building Rust games for the DreamBox fantasy console"
 readme = "README.md"
+keywords = ["gamedev", "fantasy-console"]
+categories = ["wasm", "game-development", "command-line-utilities"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
