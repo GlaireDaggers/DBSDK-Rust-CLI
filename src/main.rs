@@ -72,7 +72,7 @@ fn ensure_mkisofs() {
     Command::new("cargo").args(["install", "mkisofs-rs"]).status().unwrap();
 }
 
-fn build_profile(inpath: &String, outpath: &String, projname: &String, disclabel: &String, is_release: bool) {
+fn build_profile(inpath: &String, outpath: &String, libname: &String, disclabel: &String, is_release: bool) {
     let buildstatus = 
         if is_release { Command::new("cargo").args(["build", "--target", "wasm32-unknown-unknown", "--release"]).status() }
         else { Command::new("cargo").args(["build", "--target", "wasm32-unknown-unknown"]).status() };
@@ -83,12 +83,12 @@ fn build_profile(inpath: &String, outpath: &String, projname: &String, disclabel
         std::process::exit(1);
     }
 
-    // output will be at target/wasm32-unknown-unknown/{debug | release}/[_projname].wasm
+    // output will be at target/wasm32-unknown-unknown/{debug | release}/[libname].wasm
     // copy it to [outpath]/{debug | release}/main.wasm
 
     let wasm_path =
-        if is_release { format!("{}/target/wasm32-unknown-unknown/release/{}.wasm", inpath, projname) }
-        else { format!("{}/target/wasm32-unknown-unknown/debug/{}.wasm", inpath, projname) };
+        if is_release { format!("{}/target/wasm32-unknown-unknown/release/{}.wasm", inpath, libname) }
+        else { format!("{}/target/wasm32-unknown-unknown/debug/{}.wasm", inpath, libname) };
 
     let binpathroot_str =
         if is_release { format!("{}/release", outpath) }
@@ -96,6 +96,9 @@ fn build_profile(inpath: &String, outpath: &String, projname: &String, disclabel
 
     let binpathroot = Path::new(binpathroot_str.as_str());
     let binpath = format!("{}/main.wasm", binpathroot_str);
+
+    println!("Creating dir: {:?}", binpathroot);
+    println!("Copying {} to {}", wasm_path, binpath);
 
     fs::create_dir_all(binpathroot).unwrap();
     fs::copy(Path::new(wasm_path.as_str()), Path::new(binpath.as_str())).unwrap();
@@ -157,17 +160,34 @@ fn build(inpath: &String, outpath: &Option<String>, profile: &Option<String>, la
 
     // parse Cargo.toml
     let cargo = Manifest::from_path(cargopath).unwrap();
-    let projname = cargo.package.unwrap().name;
 
-    let disclabel = label.as_ref().unwrap_or(&projname);
+    // default lib name is project name (but convert kebab case to snake case)
+    let mut libname = str::replace(&cargo.package.unwrap().name, "-", "_");
+
+    // otherwise, if cargo defines a lib name, use that
+    match cargo.lib {
+        Some(lib) => {
+            match lib.name {
+                Some(ln) => {
+                    libname = ln;
+                },
+                None => {
+                }
+            };
+        },
+        None => {
+        }
+    };
+
+    let disclabel = label.as_ref().unwrap_or(&libname);
 
     // great, now execute a build
     match profile_real.as_str() {
         "debug" => {
-            build_profile(inpath, outpath_real, &projname, disclabel, false);
+            build_profile(inpath, outpath_real, &libname, disclabel, false);
         },
         "release" => {
-            build_profile(inpath, outpath_real, &projname, disclabel, true);
+            build_profile(inpath, outpath_real, &libname, disclabel, true);
         },
         _ => {
             println!("Unrecognized build profile: {}", profile_real);
