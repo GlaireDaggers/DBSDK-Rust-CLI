@@ -77,10 +77,17 @@ fn build_profile(inpath: &String, outpath: &String, libname: &String, disclabel:
         if is_release { Command::new("cargo").args(["build", "--target", "wasm32-unknown-unknown", "--release"]).status() }
         else { Command::new("cargo").args(["build", "--target", "wasm32-unknown-unknown"]).status() };
     
-    if buildstatus.is_err() {
-        let err = buildstatus.unwrap_err();
-        println!("Build command failed: {}", err);
-        std::process::exit(1);
+    match buildstatus {
+        Ok(v) => {
+            if !v.success() {
+                println!("Build command failed");
+                std::process::exit(1);
+            }
+        }
+        Err(e) => {
+            println!("Build command failed: {}", e);
+            std::process::exit(1);
+        }
     }
 
     // output will be at target/wasm32-unknown-unknown/{debug | release}/[libname].wasm
