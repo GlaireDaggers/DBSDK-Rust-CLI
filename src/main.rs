@@ -1,4 +1,3 @@
-use std::fmt::format;
 use std::fs::{File, self, OpenOptions};
 use std::io::{prelude::*, SeekFrom};
 use std::path::Path;
@@ -20,6 +19,11 @@ enum Action {
     Build { inpath: String, #[clap(short, long)] outpath: Option<String>, #[clap(short, long)] profile: Option<String>, #[clap(short, long)] label: Option<String> },
 }
 
+const CARGO_CONFIG: &str = include_str!("../templates/config.toml");
+const CRATE_CONFIG: &str = include_str!("../templates/Cargo.toml");
+const MAIN_SOURCE_FILE: &str = include_str!("../templates/lib.rs");
+const GITKEEP: &str = include_str!("../templates/gitkeep");
+
 fn new(name: &String) {
     if Path::new("./Cargo.toml").exists() {
         println!("Cargo.toml already exists in the current path!");
@@ -29,16 +33,7 @@ fn new(name: &String) {
     // create a new Cargo.toml here
     // tried cargo_toml_builder but crate_type support is broken so plain old templated string it is
 
-    let cargo_toml = format(format_args!(r#"[package]
-name = "{}"
-version = "1.0.0"
-authors = [""]
-
-[lib]
-crate-type = ["cdylib"]
-
-[dependencies]
-"#, name));
+    let cargo_toml = CRATE_CONFIG.replace("{{name}}", name);
 
     let mut cargo_toml_file = File::create(Path::new("Cargo.toml")).unwrap();
     cargo_toml_file.write(cargo_toml.as_bytes()).unwrap();
@@ -48,23 +43,21 @@ crate-type = ["cdylib"]
 
     fs::create_dir_all(".cargo").unwrap();
     let mut main_rs_file = File::create(Path::new(".cargo/config.toml")).unwrap();
-    main_rs_file.write(r#"[build]
-target = "wasm32-unknown-unknown"
-rustflags = [
-    "-C", "link-arg=--max-memory=16777216",
-    "-C", "link-arg=--export-table",
-]"#.as_bytes()).unwrap();
+    main_rs_file.write(CARGO_CONFIG.as_bytes()).unwrap();
     println!(".cargo/config.toml written");
 
     // create src/lib.rs
 
     fs::create_dir_all("src").unwrap();
     let mut main_rs_file = File::create(Path::new("src/lib.rs")).unwrap();
-    main_rs_file.write(r#"#[no_mangle]
-pub fn main(_: i32, _: i32) -> i32 {
-    return 0;
-}"#.as_bytes()).unwrap();
+    main_rs_file.write(MAIN_SOURCE_FILE.as_bytes()).unwrap();
     println!("src/lib.rs written");
+
+    // create .gitkeep
+    let mut main_rs_file = File::create(Path::new(".gitkeep")).unwrap();
+    main_rs_file.write(GITKEEP.as_bytes()).unwrap();
+    println!(".gitkeep written");
+
 }
 
 fn ensure_mkisofs() {
@@ -72,7 +65,30 @@ fn ensure_mkisofs() {
     Command::new("cargo").args(["install", "mkisofs-rs"]).status().unwrap();
 }
 
+fn check_for_cargo_config(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let cargo_dir = path.join(".cargo");
+    let config_path = cargo_dir.join("config.toml");
+
+    if !config_path.exists() {
+        std::fs::create_dir_all(&cargo_dir)?;
+	std::fs::write(&config_path, CARGO_CONFIG)?;
+    }
+
+    println!("Created missing Cargo build config.");
+    Ok(())
+}
+
 fn build_profile(inpath: &String, outpath: &String, libname: &String, disclabel: &String, is_release: bool) {
+    let config_check = check_for_cargo_config(Path::new(inpath));
+
+    match config_check {
+        Err(e) => {
+            println!("Failed to check for config: {}", e);
+            std::process::exit(2);
+        },
+        _ => {}
+    }
+
     let buildstatus = 
         if is_release { Command::new("cargo").args(["build", "--target", "wasm32-unknown-unknown", "--release"]).status() }
         else { Command::new("cargo").args(["build", "--target", "wasm32-unknown-unknown"]).status() };
@@ -145,7 +161,7 @@ fn build_profile(inpath: &String, outpath: &String, libname: &String, disclabel:
         isofile.write_all(&[0x20]).unwrap();
     }
 
-    print!("ISO created at {}", isopath_str);
+    println!("ISO created at {}", isopath_str);
 }
 
 fn build(inpath: &String, outpath: &Option<String>, profile: &Option<String>, label: &Option<String>) {
