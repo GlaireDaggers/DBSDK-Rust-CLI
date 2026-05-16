@@ -1,0 +1,3 @@
+# Keep this! Otherwise the rom probably won't run
+!.cargo/
+!.cargo/config.toml
